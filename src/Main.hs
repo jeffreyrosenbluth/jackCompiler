@@ -4,6 +4,7 @@ import           Syntax
 import           Lexer
 import           Parser
 
+import           Data.Either
 import           Data.List             (isSuffixOf)
 import qualified Data.Text.Lazy.IO     as T
 import           System.Environment    (getArgs)
@@ -18,7 +19,10 @@ main = do
     [path] -> do
       files <- find (depth <? 10) (extension ==? ".jack") path
       outB  <- traverse parseFile files
-      print outB
+      let errs = lefts outB
+          results = rights outB
+      print errs
+      print results
 
 
 
@@ -27,13 +31,13 @@ parseFile fp = do
   f <- T.readFile fp
   return $ parse (contents parseClass) "<stdin>" f
 
-vm2asm :: FilePath -> FilePath
-vm2asm path = if isSuffixOf ".vm" path
-                then reverse . ("msa" ++) . drop 2 $ reverse path
+jack2vm :: FilePath -> FilePath
+jack2vm path = if isSuffixOf ".jack" path
+                then reverse . ("ma" ++) . drop 2 $ reverse path
                 else makeFilename path
 
 makeFilename :: FilePath -> String
 makeFilename path = path ++
-                  ( reverse . ("msa." ++) . takeWhile (/= '/') . drop 1 . reverse
+                  ( reverse . ("mv." ++) . takeWhile (/= '/') . drop 1 . reverse
                   $ path
                   )
