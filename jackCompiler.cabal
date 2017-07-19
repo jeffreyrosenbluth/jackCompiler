@@ -1,0 +1,27 @@
+name:                jackCompiler
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/githubuser/jackCompiler#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2017 Author name here
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+executable jack
+  hs-source-dirs:      src
+  other-modules:       Syntax
+                     , Lexer
+                     , Parser
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , megaparsec >= 5.0 && < 5.3
+                     , text >= 1.2 && < 1.3
+                     , text-show >= 3.4 && < 3.7
+                     , filemanip >= 0.3 && < 0.4
