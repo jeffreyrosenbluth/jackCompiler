@@ -24,8 +24,6 @@ main = do
       print errs
       print results
 
-
-
 parseFile :: FilePath -> IO (Either (ParseError Char Dec) Class)
 parseFile fp = do
   f <- T.readFile fp
