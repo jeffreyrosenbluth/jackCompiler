@@ -4,6 +4,8 @@ import           Data.Map (Map)
 import qualified Data.Map as M
 import           Data.Word
 
+import           Syntax
+
 
 data ClassKind = Static | Field
 
