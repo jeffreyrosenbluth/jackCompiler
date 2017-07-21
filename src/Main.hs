@@ -3,9 +3,13 @@ module Main where
 import           Syntax
 import           Lexer
 import           Parser
+import           CodeGen
 
+import           Control.Monad.State.Lazy
 import           Data.Either
+import           Data.Foldable         (traverse_)
 import           Data.List             (isSuffixOf)
+import qualified Data.Map              as M
 import qualified Data.Text.Lazy.IO     as T
 import           System.Environment    (getArgs)
 import           System.FilePath.Find
@@ -22,7 +26,9 @@ main = do
       let errs = lefts outB
           results = rights outB
       print errs
-      print results
+      let g = execState (traverse_ genClass results)
+                        (Model M.empty M.empty 0 0 0 0)
+      print g
 
 parseFile :: FilePath -> IO (Either (ParseError Char Dec) Class)
 parseFile fp = do

@@ -28,3 +28,5 @@ executable jack
                      , text-show >= 3.4 && < 3.7
                      , filemanip >= 0.3 && < 0.4
                      , containers >= 0.5 && < 0.6
+                     , mtl >= 2.2 && < 2.3
+                     , lens >= 4.15 && < 4.16
