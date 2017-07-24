@@ -1,8 +1,8 @@
 module Parser where
 
 import           Text.Megaparsec           hiding (Label)
-import           Text.Megaparsec.Text.Lazy (Parser)
 import           Text.Megaparsec.Expr
+import           Text.Megaparsec.Text.Lazy (Parser)
 
 import           Lexer
 import           Syntax

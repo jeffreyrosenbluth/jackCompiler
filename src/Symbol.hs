@@ -10,14 +10,14 @@ import           Data.Word
 import           Syntax
 
 
-data ClassKind = Stat Word16 | Fld Word16 
+data ClassKind = Stat Word16 | Fld Word16
   deriving Show
 
 data SubKind   = Arg Word16  | Local Word16
   deriving Show
 
 data Symbol a = Symbol
-  { _typ :: Type
+  { _typ  :: Type
   , _kind :: a
   } deriving Show
 makeLenses ''Symbol

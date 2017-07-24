@@ -1,12 +1,13 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 module CodeGen where
 
-import           Syntax
 import           Symbol
+import           Syntax
 
 import           Control.Lens
 import           Control.Monad.State.Lazy
@@ -54,15 +55,15 @@ addSymbol' :: MonadState Model m
           -> Lens' Model Word16
           -> (Type, String)
           -> m ()
-addSymbol' table kind count (ty, name) = 
+addSymbol' table kind count (ty, name) =
   addSymbol table kind count ty name
 
 classVar :: MonadState Model m => ClassVar -> m ()
 classVar cv = do
   case cv of
-    Static ty vars -> 
+    Static ty vars ->
       traverse_ (addSymbol classTable Stat staticCount ty) vars
-    Field ty vars  -> 
+    Field ty vars  ->
       traverse_ (addSymbol classTable Fld fieldCount ty) vars
 
 subDecl :: MonadState Model m => SubDecl -> m ()
@@ -72,8 +73,8 @@ subDecl sd = do
     Function    _ _ xs ys _ -> addSyms xs ys
     Method      _ n xs ys _ -> addSyms ((ClassT n, "this"):xs) ys
   where
-    addSyms args vs = do 
+    addSyms args vs = do
       traverse_ (addSymbol' subTable Arg argCount ) args
-      traverse_ (\(Var ty ws) -> 
+      traverse_ (\(Var ty ws) ->
         traverse_ (addSymbol subTable Local localCount ty) ws) vs
 
