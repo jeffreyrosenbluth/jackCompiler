@@ -1,6 +1,10 @@
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Syntax where
 
-import Data.Word
+import           Data.Word
+import           TextShow
 
 data Statement
   = Let String (Maybe Expression) Expression
@@ -39,8 +43,25 @@ data Keyword = Yes | No | Null | This
 data BinOp = Plus | Minus | Times | Divide | And | Or | Greater | Less | Equal
   deriving Show
 
+instance TextShow BinOp where
+  showb = \case
+    Plus -> "add\n"
+    Minus -> "sub\n"
+    Times -> "call Math.multiply 2\n"
+    Divide -> "call Math.divide 2\n"
+    And -> "and\n"
+    Or -> "or\n"
+    Greater -> "gt\n"
+    Less -> "lt\n"
+    Equal -> "eq\n"
+
 data UnOp = Neg | Not
   deriving Show
+
+instance TextShow UnOp where
+  showb = \case
+    Neg -> "neg\n"
+    Not -> "not\n"
 
 data Type
   = IntT
