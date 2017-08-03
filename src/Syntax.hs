@@ -31,11 +31,17 @@ data Constant
 data SubCall = SubCall String [Expression]
   deriving Show
 
-data SubDecl
-  = Constructor (Maybe Type) String [(Type, String)] [Var] [Statement]
-  | Function (Maybe Type) String [(Type, String)] [Var] [Statement]
-  | Method (Maybe Type) String [(Type, String)] [Var] [Statement]
-  deriving Show
+data ProcType = Constructor | Function | Method
+  deriving (Eq, Show)
+
+data Procedure = Procedure
+  { procType :: ProcType
+  , retType  :: Maybe Type
+  , name     :: String
+  , args     :: [(Type, String)]
+  , vars     :: [Var]
+  , stmts    :: [Statement]
+  } deriving Show
 
 data Keyword = Yes | No | Null | This
   deriving Show
@@ -78,5 +84,5 @@ data ClassVar
 data Var = Var Type [String]
   deriving Show
 
-data Class = Class String [ClassVar] [SubDecl]
+data Class = Class String [ClassVar] [Procedure]
   deriving Show

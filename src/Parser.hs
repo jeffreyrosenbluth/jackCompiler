@@ -12,7 +12,7 @@ parseClass = Class  <$ rword "class"
                    <*> identifier
                     <* symbol "{"
                    <*> sepEndBy classVar semi
-                   <*> many subDecl
+                   <*> many procedure
                     <* symbol "}"
 
 classVar :: Parser ClassVar
@@ -33,19 +33,34 @@ parseTypeVoid :: Parser (Maybe Type)
 parseTypeVoid = Nothing <$ rword "void"
             <|> optional parseType
 
-subDecl :: Parser SubDecl
-subDecl = sd
-      <*> parseTypeVoid
-      <*> identifier
-      <*> parens (sepBy ((,) <$> parseType <*> identifier) comma)
-      <*  symbol "{"
-      <*> sepEndBy var semi
-      <*> many statement
-       <* symbol "}"
+procedure :: Parser Procedure
+procedure = Procedure
+        <$> sd
+        <*> parseTypeVoid
+        <*> identifier
+        <*> parens (sepBy ((,) <$> parseType <*> identifier) comma)
+        <*  symbol "{"
+        <*> sepEndBy var semi
+        <*> many statement
+         <* symbol "}"
   where
     sd  = Constructor <$ rword "constructor"
       <|> Function    <$ rword "function"
       <|> Method      <$ rword "method"
+
+-- subDecl :: Parser SubDecl
+-- subDecl = sd
+--       <*> parseTypeVoid
+--       <*> identifier
+--       <*> parens (sepBy ((,) <$> parseType <*> identifier) comma)
+--       <*  symbol "{"
+--       <*> sepEndBy var semi
+--       <*> many statement
+--        <* symbol "}"
+--   where
+--     sd  = Constructor <$ rword "constructor"
+--       <|> Function    <$ rword "function"
+--       <|> Method      <$ rword "method"
 
 var :: Parser Var
 var = Var <$ rword "var" <*> parseType <*> sepBy1 identifier comma

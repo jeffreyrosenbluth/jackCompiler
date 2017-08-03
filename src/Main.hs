@@ -27,7 +27,7 @@ main = do
           results = rights outB
       print errs
       let g = execState (traverse_ genClass results)
-                        (Model M.empty M.empty 0 0 0 0)
+                        (Model "" M.empty M.empty 0 0 0 0)
       print g
 
 parseFile :: FilePath -> IO (Either (ParseError Char Dec) Class)

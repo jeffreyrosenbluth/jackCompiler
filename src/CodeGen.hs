@@ -24,7 +24,8 @@ import           Data.Word
 import           TextShow
 
 data Model = Model
-  { _classTable  :: SymbolTable
+  { _className   :: String
+  , _classTable  :: SymbolTable
   , _subTable    :: SymbolTable
   , _staticCount :: Word16
   , _fieldCount  :: Word16
@@ -34,9 +35,10 @@ data Model = Model
 makeLenses ''Model
 
 genClass :: MonadState Model m => Class -> m ()
-genClass (Class s cvs sds) = do
+genClass (Class nm cvs sds) = do
+  className .= nm
   traverse_ classVar cvs
-  traverse_ subDecl  sds
+  traverse_ procedure  sds
 
 addSymbol :: MonadState Model m
           => Lens' Model SymbolTable
@@ -45,9 +47,9 @@ addSymbol :: MonadState Model m
           -> Type
           -> String
           -> m ()
-addSymbol table knd count ty name = do
+addSymbol table knd count ty nm = do
   c <- use count
-  table %= M.insert name (Symbol ty knd c)
+  table %= M.insert nm (Symbol ty knd c)
   count += 1
 
 addSymbol' :: MonadState Model m
@@ -56,26 +58,27 @@ addSymbol' :: MonadState Model m
           -> Lens' Model Word16
           -> (Type, String)
           -> m ()
-addSymbol' table knd count (ty, name) =
-  addSymbol table knd count ty name
+addSymbol' table knd count (ty, nm) =
+  addSymbol table knd count ty nm
 
 classVar :: MonadState Model m => ClassVar -> m ()
 classVar = do
   \case
-    Static ty vars ->
-      traverse_ (addSymbol classTable Stat staticCount ty) vars
-    Field ty vars  ->
-      traverse_ (addSymbol classTable Fld fieldCount ty) vars
+    Static ty vs ->
+      traverse_ (addSymbol classTable Stat staticCount ty) vs
+    Field ty vs  ->
+      traverse_ (addSymbol classTable Fld fieldCount ty) vs
 
-subDecl :: MonadState Model m => SubDecl -> m ()
-subDecl = do
-  \case
-    Constructor _ _ xs ys _ -> addSyms xs ys
-    Function    _ _ xs ys _ -> addSyms xs ys
-    Method      _ n xs ys _ -> addSyms ((ClassT n, "this"):xs) ys
+procedure :: MonadState Model m => Procedure -> m Builder
+procedure (Procedure pType rType nm xs ys zs) = do
+  addSyms xs' ys
+  cn <- use className
+  n  <- use localCount
+  pure $ "function " <> showb cn <> "." <> showb nm <> " " <> showb n <> "\n"
   where
-    addSyms args vs = do
-      traverse_ (addSymbol' subTable Arg argCount ) args
+    xs' = if pType == Method then (ClassT nm, "this"):xs else xs
+    addSyms as vs = do
+      traverse_ (addSymbol' subTable Arg argCount ) as
       traverse_ (\(Var ty ws) ->
         traverse_ (addSymbol subTable Local localCount ty) ws) vs
 
@@ -91,6 +94,7 @@ expression = \case
                       Nothing -> error "Variable not defined"
                       Just v  -> pure $ push (segmentOf . _sKind $ v)
                                              (_index v)
+  CallE sc       -> subCall sc
 
 data Segment = ARG | LCL | STC | CONST | THIS | THAT | PNTR | TMP
 
@@ -107,7 +111,7 @@ instance TextShow Segment where
 
 segmentOf :: SKind -> Segment
 segmentOf Stat  = STC
-segmentOf Fld   = THIS -- XXX This is almost surely wrong.
+segmentOf Fld   = THIS
 segmentOf Arg   = ARG
 segmentOf Local = LCL
 
@@ -132,3 +136,6 @@ binop b e1 e2 = do
 
 unop :: MonadState Model m => UnOp -> Expression -> m Builder
 unop u e = mappend <$> expression e <*> pure (showb u)
+
+subCall :: MonadState Model m => SubCall -> m Builder
+subCall (SubCall s es) = undefined
