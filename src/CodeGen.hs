@@ -34,11 +34,11 @@ data Model = Model
   } deriving Show
 makeLenses ''Model
 
-genClass :: MonadState Model m => Class -> m ()
+genClass :: MonadState Model m => Class -> m Builder
 genClass (Class nm cvs sds) = do
   className .= nm
   traverse_ classVar cvs
-  traverse_ procedure  sds
+  mconcat <$> traverse procedure sds
 
 addSymbol :: MonadState Model m
           => Lens' Model SymbolTable
@@ -69,12 +69,27 @@ classVar = do
     Field ty vs  ->
       traverse_ (addSymbol classTable Fld fieldCount ty) vs
 
+statement :: MonadState Model m => Statement -> m Builder
+statement (Do (SubCall s exprs)) = do
+  es <- mconcat <$> traverse expression exprs
+  pure $ es <> "call " <> fromString s <> " " <> showb (length exprs) <> "\n"
+statement (Return _) = pure "return\n"
+
 procedure :: MonadState Model m => Procedure -> m Builder
 procedure (Procedure pType rType nm xs ys zs) = do
   addSyms xs' ys
   cn <- use className
   n  <- use localCount
-  pure $ "function " <> showb cn <> "." <> showb nm <> " " <> showb n <> "\n"
+  ss <- mconcat <$> traverse statement zs
+  let meth = if pType == Method then push ARG 0 <> "pop pointer 0\n" else ""
+  pure $ "function " <> fromString cn
+                     <> "."
+                     <> fromString nm
+                     <> " "
+                     <> showb n
+                     <> "\n"
+                     <> meth
+                     <> ss
   where
     xs' = if pType == Method then (ClassT nm, "this"):xs else xs
     addSyms as vs = do

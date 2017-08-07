@@ -14,6 +14,7 @@ import qualified Data.Text.Lazy.IO        as T
 import           System.Environment       (getArgs)
 import           System.FilePath.Find
 import           Text.Megaparsec
+import           TextShow
 
 main ::IO ()
 main = do
@@ -25,10 +26,11 @@ main = do
       outB  <- traverse parseFile files
       let errs = lefts outB
           results = rights outB
-      print errs
-      let g = execState (traverse_ genClass results)
+      -- print errs
+      let (a, b) = runState (traverse genClass results)
                         (Model "" M.empty M.empty 0 0 0 0)
-      print g
+      putStrLn . toString . mconcat $ a
+      -- print b
 
 parseFile :: FilePath -> IO (Either (ParseError Char Dec) Class)
 parseFile fp = do
