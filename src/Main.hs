@@ -28,7 +28,7 @@ main = do
           results = rights outB
       -- print errs
       let (a, b) = runState (traverse genClass results)
-                        (Model "" M.empty M.empty 0 0 0 0)
+                        (Model "" M.empty M.empty 0 0 0 0 0)
       putStrLn . toString . mconcat $ a
       -- print b
 

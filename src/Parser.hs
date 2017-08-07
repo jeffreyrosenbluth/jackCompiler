@@ -48,20 +48,6 @@ procedure = Procedure
       <|> Function    <$ rword "function"
       <|> Method      <$ rword "method"
 
--- subDecl :: Parser SubDecl
--- subDecl = sd
---       <*> parseTypeVoid
---       <*> identifier
---       <*> parens (sepBy ((,) <$> parseType <*> identifier) comma)
---       <*  symbol "{"
---       <*> sepEndBy var semi
---       <*> many statement
---        <* symbol "}"
---   where
---     sd  = Constructor <$ rword "constructor"
---       <|> Function    <$ rword "function"
---       <|> Method      <$ rword "method"
-
 var :: Parser Var
 var = Var <$ rword "var" <*> parseType <*> sepBy1 identifier comma
 
