@@ -26,10 +26,11 @@ main = do
       outB  <- traverse parseFile files
       let errs = lefts outB
           results = rights outB
+          fnames = jack2vm <$> files
           (a, b) = runState (traverse genClass results)
                         (Model "" M.empty M.empty 0 0 0 0 0)
-      putStrLn . toString . mconcat $ a
-      -- print b
+      zipWithM_ T.writeFile fnames (TextShow.toLazyText <$> a)
+      print b
 
 parseFile :: FilePath -> IO (Either (ParseError Char Dec) Class)
 parseFile fp = do
@@ -38,7 +39,7 @@ parseFile fp = do
 
 jack2vm :: FilePath -> FilePath
 jack2vm path = if isSuffixOf ".jack" path
-                then reverse . ("ma" ++) . drop 2 $ reverse path
+                then reverse . ("mv" ++) . drop 4 $ reverse path
                 else makeFilename path
 
 makeFilename :: FilePath -> String
