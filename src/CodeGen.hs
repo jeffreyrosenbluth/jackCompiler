@@ -13,14 +13,10 @@ import           Syntax
 import           Control.Lens             hiding (index)
 import           Control.Monad.State.Lazy
 import           Data.Foldable
--- import           Data.Map                 (Map)
 import qualified Data.Map                 as M
 import           Data.Maybe               (fromMaybe)
 import           Data.Monoid
--- import           Data.Text.Lazy           (Text)
--- import qualified Data.Text.Lazy           as T
 import           Data.Text.Lazy.Builder   (Builder)
--- import qualified Data.Text.Lazy.Builder   as T
 import           Data.Word
 import           TextShow
 
@@ -124,14 +120,25 @@ statement (While expr ss) = do
                   <> "goto " <> l1
                   <> "label " <> l2
 
-
-statement (Do sc) = subCall sc
+statement (Do sc) = do
+  s <- subCall sc
+  pure $ s <> pop TMP 0
 
 statement (Return mExpr) = case mExpr of
-  Nothing -> pure $ pop TMP 0 <> "return\n"
+  Nothing -> pure $ push CONST 0 <> "return\n"
   Just expr -> do
     e <- expression expr
     pure $ e <> "return\n"
+
+constructor :: Word16 -> Builder
+constructor n
+  | n == 0 = pop PNTR 0
+  | otherwise = push CONST n
+              <> "call Memory.alloc 1\n"
+              <> pop PNTR 0
+
+method :: Builder
+method = push ARG 0 <> pop PNTR 0
 
 procedure :: MonadState Model m => Procedure -> m Builder
 procedure (Procedure pType rType nm xs ys zs) = do
@@ -140,15 +147,19 @@ procedure (Procedure pType rType nm xs ys zs) = do
   addSyms xs' ys
   cn <- use className
   n  <- use localCount
+  fn <- use fieldCount
   ss <- mconcat <$> traverse statement zs
-  let meth = if pType == Method then push ARG 0 <> pop PNTR 0 else ""
+  let specific = case pType of
+        Constructor -> constructor fn
+        Method      -> method
+        Function    -> ""
   pure $ "function " <> fromString cn
                      <> "."
                      <> fromString nm
                      <> " "
                      <> showb n
                      <> "\n"
-                     <> meth
+                     <> specific
                      <> ss
   where
     xs' = if pType == Method then (ClassT nm, "this"):xs else xs
@@ -200,11 +211,11 @@ constant :: MonadState Model m => Constant -> m Builder
 constant = \case
   IntC n        -> pure $ p n
   StringC s     -> undefined
-  KeywordC Yes  -> pure $ p 1 <> "neg\n"
-  KeywordC This -> undefined
+  KeywordC Yes  -> pure $ p 0 <> "not\n"
+  KeywordC This -> pure $ push PNTR 0 -- XXX maybe not
   KeywordC _    -> pure $ p 0
   where
-    p x = push CONST x <> "\n"
+    p x = push CONST x
 
 binop :: MonadState Model m => BinOp -> Expression -> Expression -> m Builder
 binop b e1 e2 = do
@@ -218,4 +229,27 @@ unop u e = mappend <$> expression e <*> pure (showb u)
 subCall :: MonadState Model m => SubCall -> m Builder
 subCall (SubCall s exprs) = do
   es <- mconcat <$> traverse expression exprs
-  pure $ es <> "call " <> fromString s <> " " <> showb (length exprs) <> "\n"
+  cn <- use className
+  m  <- get
+  case symbol (takeWhile (/= '.') s) (tables m) of
+    Just v -> do
+      let nm = drop 1 . dropWhile (/= '.') $ s
+          s' = cName (v ^. sType) <> "." <> nm
+          sg = segmentOf (v ^. sKind)
+          i  = v ^. index
+          o  = push sg i
+      pure $ o <> es <> "call " <> fromString s' <> " " <> showb (1 + length exprs) <> "\n"
+    Nothing ->
+      if '.' `elem` s
+        then pure $ es <> "call "
+                       <> fromString s
+                       <> " "
+                       <> showb (length exprs)
+                       <> "\n"
+        else pure $ push PNTR 0
+                 <> es
+                 <> "call "
+                 <> fromString (cn <> "." <> s)
+                 <> " "
+                 <> showb (1 + length exprs)
+                 <> "\n"

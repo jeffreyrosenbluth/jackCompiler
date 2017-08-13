@@ -76,6 +76,10 @@ data Type
   | ClassT String
   deriving Show
 
+cName :: Type -> String
+cName (ClassT s) = s
+cName _          = error "Not a class name"
+
 data ClassVar
   = Static Type [String]
   | Field Type [String]

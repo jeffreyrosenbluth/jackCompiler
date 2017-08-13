@@ -26,8 +26,7 @@ main = do
       outB  <- traverse parseFile files
       let errs = lefts outB
           results = rights outB
-      -- print errs
-      let (a, b) = runState (traverse genClass results)
+          (a, b) = runState (traverse genClass results)
                         (Model "" M.empty M.empty 0 0 0 0 0)
       putStrLn . toString . mconcat $ a
       -- print b
