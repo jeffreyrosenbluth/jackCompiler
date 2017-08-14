@@ -10,17 +10,18 @@ module CodeGen where
 import           Symbol
 import           Syntax
 
-import           Control.Lens             hiding (index)
-import           Control.Monad.State.Lazy
+import           Control.Lens             (Lens', makeLenses, use, (%=), (+=),
+                                           (.=), (^.))
+import           Control.Monad.State.Lazy (MonadState, get, gets)
 import           Data.Char                (ord)
-import           Data.Foldable
+import           Data.Foldable            (traverse_)
 import           Data.List                (intersperse)
-import qualified Data.Map                 as M
+import           Data.Map                 (insert)
 import           Data.Maybe               (fromMaybe)
-import           Data.Monoid
+import           Data.Monoid              (mconcat, (<>))
 import           Data.Text.Lazy.Builder   (Builder)
-import           Data.Word
-import           TextShow
+import           Data.Word                (Word16)
+import           TextShow                 (TextShow, fromString, showb)
 
 data Model = Model
   { _className   :: String
@@ -52,7 +53,7 @@ addSymbol :: MonadState Model m
           -> m ()
 addSymbol table knd count ty nm = do
   c <- use count
-  table %= M.insert nm (Symbol ty knd c)
+  table %= insert nm (Symbol ty knd c)
   count += 1
 
 addSymbol' :: MonadState Model m
@@ -70,44 +71,40 @@ classVar = \case
 
 statement :: MonadState Model m => Statement -> m Builder
 statement (Let s mExpr expr) = do
-  e <- expression expr
+  e  <- expression expr
   ts <- gets tables
-  let sym = fromMaybe (error "Variable not in scope") (symbol s ts)
+  let sym = fromMaybe (error $ "Variable not in scope: " <> s) (symbol s ts)
   case mExpr of
     Nothing -> do
-      let x = pop (segmentOf (sym ^. sKind)) (sym ^. index)
+      let x = popSymbol sym
       pure $ e <> x
     Just mE -> do
       idx <- expression mE
-      let x = push (segmentOf (sym ^. sKind)) (sym ^. index)
+      let x = pushSymbol sym
       pure $ mconcat
         [idx, x, "add\n", e, pop TMP 0, pop PNTR 1, push TMP 0, pop THAT 0]
 
 statement (If expr ss mss) = do
-  e <- expression expr
-  ss' <- mconcat <$> traverse statement ss
-  l1Num <- use labelCount
-  labelCount += 1
-  l2Num <- use labelCount
-  labelCount += 1
+  e    <- expression expr
+  ss'  <- mconcat <$> traverse statement ss
+  lNum <- use labelCount
+  labelCount += 2
   let ne = e <> "not\n"
       el = fromMaybe [] mss
-      l1  = "L" <> showb l1Num <> "\n"
-      l2  = "L" <> showb l2Num <> "\n"
+      l1 = "L" <> showb lNum       <> "\n"
+      l2 = "L" <> showb (lNum + 1) <> "\n"
   mss' <- mconcat <$> traverse statement el
   pure $ mconcat
     [ne, "if-goto ", l1, ss', "goto ", l2, "label ", l1, mss', "label ", l2]
 
 statement (While expr ss) = do
-  e <- expression expr
-  ss' <- mconcat <$> traverse statement ss
-  l1Num <- use labelCount
-  labelCount += 1
-  l2Num <- use labelCount
-  labelCount += 1
+  e    <- expression expr
+  ss'  <- mconcat <$> traverse statement ss
+  lNum <- use labelCount
+  labelCount += 2
   let ne = e <> "not\n"
-      l1  = "L" <> showb l1Num <> "\n"
-      l2  = "L" <> showb l2Num <> "\n"
+      l1 = "L" <> showb lNum       <> "\n"
+      l2 = "L" <> showb (lNum + 1) <> "\n"
   pure $ mconcat
     ["label ", l1, ne, "if-goto ", l2, ss',"goto ", l1, "label ", l2]
 
@@ -121,14 +118,6 @@ statement (Return mExpr) = case mExpr of
     e <- expression expr
     pure $ e <> "return\n"
 
-constructor :: Word16 -> Builder
-constructor n
-  | n == 0 = pop PNTR 0
-  | otherwise = push CONST n <> "call Memory.alloc 1\n" <> pop PNTR 0
-
-method :: Builder
-method = push ARG 0 <> pop PNTR 0
-
 procedure :: MonadState Model m => Procedure -> m Builder
 procedure (Procedure pType _ nm xs ys zs) = do
   argCount   .= 0
@@ -140,7 +129,7 @@ procedure (Procedure pType _ nm xs ys zs) = do
   ss <- mconcat <$> traverse statement zs
   let specific = case pType of
         Constructor -> constructor fn
-        Method      -> method
+        Method      -> push ARG 0 <> pop PNTR 0
         Function    -> ""
   pure $ mconcat
     [ "function "
@@ -150,6 +139,9 @@ procedure (Procedure pType _ nm xs ys zs) = do
     , specific, ss
     ]
   where
+    constructor n
+      | n == 0    = pop PNTR 0
+      | otherwise = push CONST n <> "call Memory.alloc 1\n" <> pop PNTR 0
     xs' = if pType == Method then (ClassT nm, "this"):xs else xs
     addSyms as vs = do
       traverse_ (addSymbol' subTable Arg argCount ) as
@@ -166,10 +158,10 @@ expression = \case
     tbls <- gets tables
     let sym = fromMaybe (error "Variable not in scope.") (symbol s tbls)
     case e of
-      Nothing -> pure $ push (segmentOf $ sym ^. sKind) (sym ^. index)
+      Nothing -> pure $ pushSymbol sym
       Just e' -> do
         idx <- expression e'
-        let l1 = push (segmentOf $ sym ^. sKind) (sym ^. index)
+        let l1 = pushSymbol sym
             l2 = "add\n"
             l3 = pop PNTR 1
             l4 = push THAT 0
@@ -197,8 +189,14 @@ segmentOf Local = LCL
 push :: Segment -> Word16 -> Builder
 push s n = "push " <> showb s <> showb n <> "\n"
 
+pushSymbol :: Symbol -> Builder
+pushSymbol s = push (segmentOf $ s ^. sKind) (s ^. index)
+
 pop :: Segment -> Word16 -> Builder
 pop s n = "pop " <> showb  s <> showb n <> "\n"
+
+popSymbol :: Symbol -> Builder
+popSymbol s = pop (segmentOf $ s ^. sKind) (s ^. index)
 
 constant :: MonadState Model m => Constant -> m Builder
 constant = \case
@@ -233,11 +231,11 @@ subCall (SubCall s exprs) = do
     Just v -> do
       let nm = drop 1 . dropWhile (/= '.') $ s
           s' = cName (v ^. sType) <> "." <> nm
-          sg = segmentOf (v ^. sKind)
-          i  = v ^. index
-          o  = push sg i
       pure $ mconcat
-        [o, es, "call ", fromString s',  " ", showb (1 + length exprs), "\n"]
+        [ pushSymbol v
+        , es
+        , "call ", fromString s',  " ", showb (1 + length exprs), "\n"
+        ]
     Nothing ->
       if '.' `elem` s
         then pure $ mconcat
