@@ -161,25 +161,19 @@ expression = \case
   ConstantE c    -> constant c
   BinOpE b e1 e2 -> binop b e1 e2
   UnOpE u e      -> unop u e
+  CallE sc       -> subCall sc
   VarE s e       -> do
     tbls <- gets tables
+    let sym = fromMaybe (error "Variable not in scope.") (symbol s tbls)
     case e of
-      Nothing -> do
-        case symbol s tbls of
-          Nothing -> error "Variable not defined"
-          Just v  -> pure $ push (segmentOf $ v ^. sKind) (v ^. index)
+      Nothing -> pure $ push (segmentOf $ sym ^. sKind) (sym ^. index)
       Just e' -> do
-        case symbol s tbls of
-          Nothing -> error "Variable not defined"
-          Just v  -> do
-            idx <- expression e'
-            let l1 = push (segmentOf $ v ^. sKind) (v ^. index)
-                l2 = "add\n"
-                l3 = pop PNTR 1
-                l4 = push THAT 0
-            pure $ mconcat [idx, l1, l2, l3, l4]
-
-  CallE sc       -> subCall sc
+        idx <- expression e'
+        let l1 = push (segmentOf $ sym ^. sKind) (sym ^. index)
+            l2 = "add\n"
+            l3 = pop PNTR 1
+            l4 = push THAT 0
+        pure $ mconcat [idx, l1, l2, l3, l4]
 
 data Segment = ARG | LCL | STC | CONST | THIS | THAT | PNTR | TMP
 
@@ -242,18 +236,14 @@ subCall (SubCall s exprs) = do
           sg = segmentOf (v ^. sKind)
           i  = v ^. index
           o  = push sg i
-      pure $ o <> es <> "call " <> fromString s' <> " " <> showb (1 + length exprs) <> "\n"
+      pure $ mconcat
+        [o, es, "call ", fromString s',  " ", showb (1 + length exprs), "\n"]
     Nothing ->
       if '.' `elem` s
-        then pure $ es <> "call "
-                       <> fromString s
-                       <> " "
-                       <> showb (length exprs)
-                       <> "\n"
-        else pure $ push PNTR 0
-                 <> es
-                 <> "call "
-                 <> fromString (cn <> "." <> s)
-                 <> " "
-                 <> showb (1 + length exprs)
-                 <> "\n"
+        then pure $ mconcat
+          [es, "call ", fromString s, " ", showb (length exprs), "\n"]
+        else pure $ mconcat
+          [ push PNTR 0, es
+          , "call ", fromString (cn <> "." <> s), " "
+          , showb (1 + length exprs), "\n"
+          ]
