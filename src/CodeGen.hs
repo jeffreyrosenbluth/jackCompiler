@@ -12,7 +12,9 @@ import           Syntax
 
 import           Control.Lens             hiding (index)
 import           Control.Monad.State.Lazy
+import           Data.Char                (ord)
 import           Data.Foldable
+import           Data.List                (intersperse)
 import qualified Data.Map                 as M
 import           Data.Maybe               (fromMaybe)
 import           Data.Monoid
@@ -71,14 +73,22 @@ classVar = do
       traverse_ (addSymbol classTable Fld fieldCount ty) vs
 
 statement :: MonadState Model m => Statement -> m Builder
-statement (Let s mexpr expr) = do
+statement (Let s mExpr expr) = do
   e <- expression expr
   ts <- gets tables
   let sym = symbol s ts
-      x   = case sym of
-        Nothing   -> error "Variable not in scope"
-        Just sym' -> pop (segmentOf (sym' ^. sKind)) (sym' ^. index)
-  pure $ e <> x
+  case mExpr of
+    Nothing -> do
+      let x = case sym of
+                Nothing   -> error "Variable not in scope"
+                Just sym' -> pop (segmentOf (sym' ^. sKind)) (sym' ^. index)
+      pure $ e <> x
+    Just mE -> do
+      idx <- expression mE
+      let x = case sym of
+                Nothing   -> error "Variable not in scope"
+                Just sym' -> push (segmentOf (sym' ^. sKind)) (sym' ^. index)
+      pure $ mconcat [idx, x, "add\n", e, pop TMP 0, pop PNTR 1, push TMP 0, pop THAT 0]
 
 statement (If expr ss mss) = do
   e <- expression expr
@@ -168,18 +178,41 @@ procedure (Procedure pType rType nm xs ys zs) = do
       traverse_ (\(Var ty ws) ->
         traverse_ (addSymbol subTable Local localCount ty) ws) vs
 
+-- elif key == 'arrayAccess':
+--          nast = ast.next_sec()
+--          varname = nast.next_val()
+--          nast.next() # '['
+--          self.expression(state, nast.next_sec())
+--          nast.next() # ']'
+--          self.codewriter.push_var(state['sym_tbl'].lookup(varname))
+--          self.codewriter.raw('add') #base address + index
+--          self.codewriter.pop('pointer', 1) #store indexed address in 'that'
+--          self.codewriter.push('that', 0)
+
 expression :: MonadState Model m => Expression -> m Builder
 expression = \case
   ConstantE c    -> constant c
   BinOpE b e1 e2 -> binop b e1 e2
   UnOpE u e      -> unop u e
-  VarE s _       -> do
+  VarE s e       -> do
     ct <- use classTable
     st <- use subTable
-    case symbol s [st, ct] of
-                      Nothing -> error "Variable not defined"
-                      Just v  -> pure $ push (segmentOf $ v ^. sKind)
-                                             (v ^. index)
+    case e of
+      Nothing -> do
+        case symbol s [st, ct] of
+          Nothing -> error "Variable not defined"
+          Just v  -> pure $ push (segmentOf $ v ^. sKind) (v ^. index)
+      Just e' -> do
+        case symbol s [st, ct] of
+          Nothing -> error "Variable not defined"
+          Just v  -> do
+            idx <- expression e'
+            let l1 = push (segmentOf $ v ^. sKind) (v ^. index)
+                l2 = "add\n"
+                l3 = pop PNTR 1
+                l4 = push THAT 0
+            pure $ mconcat [idx, l1, l2, l3, l4]
+
   CallE sc       -> subCall sc
 
 data Segment = ARG | LCL | STC | CONST | THIS | THAT | PNTR | TMP
@@ -210,9 +243,14 @@ pop s n = "pop " <> showb  s <> showb n <> "\n"
 constant :: MonadState Model m => Constant -> m Builder
 constant = \case
   IntC n        -> pure $ p n
-  StringC s     -> undefined
+  StringC s     -> do
+    let l1 = push CONST (fromIntegral . length $ s)
+        l2 = "call String.new 1\n"
+        l3 = push CONST . fromIntegral . ord <$> s
+        l4 = "call String.appendChar 2\n"
+    pure $ mconcat [l1, l2, mconcat (intersperse l4 l3), l4]
   KeywordC Yes  -> pure $ p 0 <> "not\n"
-  KeywordC This -> pure $ push PNTR 0 -- XXX maybe not
+  KeywordC This -> pure $ push PNTR 0
   KeywordC _    -> pure $ p 0
   where
     p x = push CONST x
