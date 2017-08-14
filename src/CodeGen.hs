@@ -61,34 +61,27 @@ addSymbol' :: MonadState Model m
           -> Lens' Model Word16
           -> (Type, String)
           -> m ()
-addSymbol' table knd count (ty, nm) =
-  addSymbol table knd count ty nm
+addSymbol' table knd count (ty, nm) = addSymbol table knd count ty nm
 
 classVar :: MonadState Model m => ClassVar -> m ()
-classVar = do
-  \case
-    Static ty vs ->
-      traverse_ (addSymbol classTable Stat staticCount ty) vs
-    Field ty vs  ->
-      traverse_ (addSymbol classTable Fld fieldCount ty) vs
+classVar = \case
+  Static ty vs -> traverse_ (addSymbol classTable Stat staticCount ty) vs
+  Field ty vs  -> traverse_ (addSymbol classTable Fld fieldCount ty) vs
 
 statement :: MonadState Model m => Statement -> m Builder
 statement (Let s mExpr expr) = do
   e <- expression expr
   ts <- gets tables
-  let sym = symbol s ts
+  let sym = fromMaybe (error "Variable not in scope") (symbol s ts)
   case mExpr of
     Nothing -> do
-      let x = case sym of
-                Nothing   -> error "Variable not in scope"
-                Just sym' -> pop (segmentOf (sym' ^. sKind)) (sym' ^. index)
+      let x = pop (segmentOf (sym ^. sKind)) (sym ^. index)
       pure $ e <> x
     Just mE -> do
       idx <- expression mE
-      let x = case sym of
-                Nothing   -> error "Variable not in scope"
-                Just sym' -> push (segmentOf (sym' ^. sKind)) (sym' ^. index)
-      pure $ mconcat [idx, x, "add\n", e, pop TMP 0, pop PNTR 1, push TMP 0, pop THAT 0]
+      let x = push (segmentOf (sym ^. sKind)) (sym ^. index)
+      pure $ mconcat
+        [idx, x, "add\n", e, pop TMP 0, pop PNTR 1, push TMP 0, pop THAT 0]
 
 statement (If expr ss mss) = do
   e <- expression expr
@@ -102,16 +95,8 @@ statement (If expr ss mss) = do
       l1  = "L" <> showb l1Num <> "\n"
       l2  = "L" <> showb l2Num <> "\n"
   mss' <- mconcat <$> traverse statement el
-  pure $ ne <> "if-goto "
-            <> l1
-            <> ss'
-            <> "goto "
-            <> l2
-            <> "label "
-            <> l1
-            <> mss'
-            <> "label "
-            <> l2
+  pure $ mconcat
+    [ne, "if-goto ", l1, ss', "goto ", l2, "label ", l1, mss', "label ", l2]
 
 statement (While expr ss) = do
   e <- expression expr
@@ -123,12 +108,8 @@ statement (While expr ss) = do
   let ne = e <> "not\n"
       l1  = "L" <> showb l1Num <> "\n"
       l2  = "L" <> showb l2Num <> "\n"
-  pure $ "label " <> l1
-                  <> ne
-                  <> "if-goto " <> l2
-                  <> ss'
-                  <> "goto " <> l1
-                  <> "label " <> l2
+  pure $ mconcat
+    ["label ", l1, ne, "if-goto ", l2, ss',"goto ", l1, "label ", l2]
 
 statement (Do sc) = do
   s <- subCall sc
@@ -143,16 +124,14 @@ statement (Return mExpr) = case mExpr of
 constructor :: Word16 -> Builder
 constructor n
   | n == 0 = pop PNTR 0
-  | otherwise = push CONST n
-              <> "call Memory.alloc 1\n"
-              <> pop PNTR 0
+  | otherwise = push CONST n <> "call Memory.alloc 1\n" <> pop PNTR 0
 
 method :: Builder
 method = push ARG 0 <> pop PNTR 0
 
 procedure :: MonadState Model m => Procedure -> m Builder
-procedure (Procedure pType rType nm xs ys zs) = do
-  argCount .= 0
+procedure (Procedure pType _ nm xs ys zs) = do
+  argCount   .= 0
   localCount .= 0
   addSyms xs' ys
   cn <- use className
@@ -163,14 +142,13 @@ procedure (Procedure pType rType nm xs ys zs) = do
         Constructor -> constructor fn
         Method      -> method
         Function    -> ""
-  pure $ "function " <> fromString cn
-                     <> "."
-                     <> fromString nm
-                     <> " "
-                     <> showb n
-                     <> "\n"
-                     <> specific
-                     <> ss
+  pure $ mconcat
+    [ "function "
+    , fromString cn, "."
+    , fromString nm, " "
+    , showb n, "\n"
+    , specific, ss
+    ]
   where
     xs' = if pType == Method then (ClassT nm, "this"):xs else xs
     addSyms as vs = do
@@ -178,32 +156,20 @@ procedure (Procedure pType rType nm xs ys zs) = do
       traverse_ (\(Var ty ws) ->
         traverse_ (addSymbol subTable Local localCount ty) ws) vs
 
--- elif key == 'arrayAccess':
---          nast = ast.next_sec()
---          varname = nast.next_val()
---          nast.next() # '['
---          self.expression(state, nast.next_sec())
---          nast.next() # ']'
---          self.codewriter.push_var(state['sym_tbl'].lookup(varname))
---          self.codewriter.raw('add') #base address + index
---          self.codewriter.pop('pointer', 1) #store indexed address in 'that'
---          self.codewriter.push('that', 0)
-
 expression :: MonadState Model m => Expression -> m Builder
 expression = \case
   ConstantE c    -> constant c
   BinOpE b e1 e2 -> binop b e1 e2
   UnOpE u e      -> unop u e
   VarE s e       -> do
-    ct <- use classTable
-    st <- use subTable
+    tbls <- gets tables
     case e of
       Nothing -> do
-        case symbol s [st, ct] of
+        case symbol s tbls of
           Nothing -> error "Variable not defined"
           Just v  -> pure $ push (segmentOf $ v ^. sKind) (v ^. index)
       Just e' -> do
-        case symbol s [st, ct] of
+        case symbol s tbls of
           Nothing -> error "Variable not defined"
           Just v  -> do
             idx <- expression e'
