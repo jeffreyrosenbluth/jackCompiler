@@ -1,12 +1,10 @@
-
 module Lexer  where
 
-import           Control.Applicative
 import           Control.Monad             (void)
-import           Data.Char
+import           Data.Char                 (isAlphaNum)
 import           Text.Megaparsec
 import qualified Text.Megaparsec.Lexer     as L
-import           Text.Megaparsec.Text.Lazy
+import           Text.Megaparsec.Text.Lazy (Parser)
 
 sc :: Parser ()
 sc = L.space (void spaceChar) lineCmnt blockCmnt
@@ -112,7 +110,7 @@ identifier = (lexeme . try) (p >>= check)
   where
     p       = (:) <$> letterChar <*> many (satisfy identChars)
     check x = if x `elem` rws
-                then fail $ "keyword " ++ show x ++ " cannot be an identifier"
+                then fail $ "Keyword " ++ show x ++ " cannot be an identifier"
                 else return x
 
 subName :: Parser String
